@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 from discord.ui import View, Button, Modal, TextInput
 import asyncio
+import json
 from flask import Flask
 import random
 from threading import Thread
@@ -134,8 +135,9 @@ class CancelView(View):
 
 # 📌 **Admin Command: Send Application Panel**
 @bot.tree.command(name="send_application_panel", description="Sends the application panel in a selected channel.")
-@is_admin()
 async def send_application_panel(interaction: discord.Interaction, channel: discord.TextChannel):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
     embed = discord.Embed(
         title="📌 Staff Applications",
         description="Click the **Start Application** button below to apply for a staff position.",
@@ -146,10 +148,10 @@ async def send_application_panel(interaction: discord.Interaction, channel: disc
 
 # 📌 **Admin Command: Announce Selected Staff**
 @bot.tree.command(name="announce_staff", description="Announces a user as selected staff.")
-@is_admin()
 async def announce_staff(interaction: discord.Interaction, user: discord.Member):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
     staff_role = discord.utils.get(interaction.guild.roles, id=STAFF_ROLE_ID)
-    
     if staff_role:
         await user.add_roles(staff_role)
         ann_channel = bot.get_channel(ANNOUNCEMENT_CHANNEL_ID)
@@ -163,8 +165,43 @@ async def announce_staff(interaction: discord.Interaction, user: discord.Member)
         await interaction.response.send_message(f"✅ **{user.mention} has been announced as staff!**", ephemeral=True)
     else:
         await interaction.response.send_message("❌ **Staff role not found!**", ephemeral=True)
+STATUS_FILE = "status.json"
+@bot.tree.command(name="set_status", description="Sets the bot's status message.(admin only)")
+@app_commands.describe(
+    status="The status message to display",
+    type="The type of status to display"
+)
+@app_commands.choices(type=[
+    app_commands.Choice(name="Playing", value="playing"),
+    app_commands.Choice(name="Streaming", value="streaming"),
+    app_commands.Choice(name="Listening", value="listening"),
+    app_commands.Choice(name="Watching", value="watching"),
+    app_commands.Choice(name="Competing", value="competing"),
+])
+async def setstatus(interaction: discord.Interaction, status: str, type: app_commands.Choice[str]):
+    if not interaction.user.guild_permissions.administrator:
+        return await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
+    status_type = type.value
+    if status_type == "playing":
+        activity = discord.Game(name=status)
+    elif status_type == "streaming":
+        activity = discord.Streaming(name=status, url="https://www.youtube.com/@DRAXITY_official")
+    elif status_type == "listening":
+        activity = discord.Activity(type=discord.ActivityType.listening, name=status)
+    elif status_type == "watching":
+        activity = discord.Activity(type=discord.ActivityType.watching, name=status)
+    elif status_type == "competing":
+        activity = discord.Activity(type=discord.ActivityType.competing, name=status)
+    else:
+        activity = discord.Game(name=status)
+    await interaction.client.change_presence(activity=activity)
+    try:
+        with open(STATUS_FILE, "w") as f:
+            json.dump({"status": status, "type": status_type}, f)
+    except Exception as e:
+        print("Error saving status:", e)
+    await interaction.response.send_message(f"Bot status updated to: {status} ({status_type.capitalize()})", ephemeral=True)
 
-# 📌 **Bot Ready Event**
 @bot.event
 async def on_ready():
     await bot.tree.sync()
