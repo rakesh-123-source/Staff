@@ -1,170 +1,165 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import View, Button, Modal, TextInput
 import asyncio
 import json
 from flask import Flask
-import random
 from threading import Thread
+import re 
+import firebase_admin
+from firebase_admin import credentials, firestore
 app = Flask('')
 @app.route('/')
 def home():
     return "Bot is running!"
 def run():
-    app.run(host='0.0.0.0', port=8080) 
+    app.run(host='0.0.0.0', port=8080)
 def keep_alive():
     t = Thread(target=run)
     t.start()
 keep_alive()
-
-
-GUILD_ID = 1270760786817450086  # Replace with your server ID
-APPLICATIONS_CHANNEL_ID = 1348759783184011324  # Replace with the applications channel ID
-ANNOUNCEMENT_CHANNEL_ID = 1330801025761808416  # Replace with the announcement channel ID
-STAFF_ROLE_ID = 1337669415646396518  # Replace with the staff role ID
-
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
-
-# ✅ Admin Check
-def is_admin():
-    def predicate(interaction: discord.Interaction):
-        return interaction.user.guild_permissions.administrator
-    return app_commands.check(predicate)
-
-# 📌 **Start Application Panel**
-class StartApplicationView(View):
-    def __init__(self):
-        super().__init__(timeout=None)  # Never times out
-
-    @discord.ui.button(label="Start Application", style=discord.ButtonStyle.green)
-    async def start_application(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("✅ **Check your DMs to start the application!**", ephemeral=True)
-        await start_application_process(interaction.user)
-
-# 📌 **Confirmation View before starting**
-class ConfirmView(View):
-    def __init__(self):
-        super().__init__(timeout=30)
-        self.value = None
-
-    @discord.ui.button(label="Confirm", style=discord.ButtonStyle.green)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.value = True
-        self.stop()
-
-    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.red)
-    async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.value = False
-        await interaction.response.send_message("❌ **Application canceled!**", ephemeral=True)
-        self.stop()
-
-# 📌 **Application Process (DMs)**
-async def start_application_process(user: discord.User):
+GUILD_ID = 1270760786817450086  
+APPLICATIONS_CHANNEL_ID = 1348759783184011324  
+ANNOUNCEMENT_CHANNEL_ID = 1330801025761808416 
+STAFF_ROLE_ID = 1337669415646396518
+SAPHIRE_BOT_ID = 678344927997853742
+SAPHIRE_LISTENING_CHANNEL_ID = 1335334770980159579
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
+cred = credentials.Certificate("server_staffs.json") 
+app1 = firebase_admin.initialize_app(cred, name="firebase_app1")
+db = firestore.client(app=app1)
+APPLICATIONS_COLLECTION = "applications"
+NUM_QUESTIONS = 10
+DEFAULT_PLACEHOLDER = "** **"
+QUESTIONS = [
+    "What is your time zone?",
+    "Why you want to join our staff team?",
+    "Have you ever did moderation before ?",
+    "Do you know to use our moderation bots ?",
+    "Do you agree our server staff rules ?",
+    "What relevant skills  you have that would benefit our staff team?",
+    "How would you handle a conflict between community members?",
+    "What strategies would you use to maintain our server?",
+    "Can you describe a situation where you successfully resolved a challenging issue online?",
+    "What are your expectations from our staff team, and how do you see yourself contributing?"
+]
+def get_application_instructions() -> str:
+    instructions = (
+        "> You have already received the application form.\n"
+        "> Please reply in one message with your answers in order, each on a new line.\n"
+        f"> Ensure you provide exactly {NUM_QUESTIONS} answers.\n\n"
+        "For example, your reply should be formatted as follows:\n"
+        "```\n"
+        "1. What is your time zone?\n"
+        "> Answer:  GMT+:30\n"
+        "** **\n"
+        "2. Why you want to join our staff team?\n"
+        "> Answer:  I want to make the server more good !\n"
+        "** **\n"
+        "......\n"
+        "10. What are your expectations from our staff team, and how do you see yourself contributing?\n"
+        "> Answer:  As a moderator .\n"
+        "** **\n"
+        "```\n\n"
+    )
+    return instructions
+def parse_application_response(content: str):
+    pattern = r'\d+\.\s*.*?\n>\s*Answer:\s*(.*?)(?=\n\d+\.|$)'
+    answers = re.findall(pattern, content, re.DOTALL)
+    if len(answers) != NUM_QUESTIONS:
+        return None
+    cleaned_answers = []
+    for ans in answers:
+        cleaned = ans.strip()
+        if cleaned == "" or cleaned == DEFAULT_PLACEHOLDER:
+            return None
+        cleaned_answers.append(cleaned)
+    return cleaned_answers
+def user_has_application(user_id: int) -> bool:
+    doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(user_id))
+    doc = doc_ref.get()
+    if doc.exists:
+        data = doc.to_dict()
+        if data.get("status") in ("in_progress", "submitted", "selected"):
+            return True
+    return False
+def create_application_record(user_id: int):
+    doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(user_id))
+    doc_ref.set({"status": "in_progress"})
+def update_application_record(user_id: int, status: str, application_text: str = None):
+    doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(user_id))
+    update_data = {"status": status}
+    if application_text is not None:
+        update_data["application_text"] = application_text
+    doc_ref.update(update_data)
+async def trigger_application_for_user(member: discord.Member):
     try:
-        questions = [
-            "What is your real name?",
-            "How old are you?",
-            "Why do you want to become a staff member?",
-            "What experience do you have in moderation?",
-            "How many hours can you dedicate daily?",
-            "How would you handle a rule-breaker?",
-            "Do you agree to follow all staff rules?"
-        ]
-
-        answers = []
-        dm_channel = await user.create_dm()
-
-        confirm_view = ConfirmView()
-        msg = await dm_channel.send(
-            embed=discord.Embed(
-                title="📝 Staff Application",
-                description="Press **Confirm** to start the application process.",
-                color=0xffaa00
-            ), 
-            view=confirm_view
+        if user_has_application(member.id):
+            dm_channel = await member.create_dm()
+            await dm_channel.send("❌ You have already filled out or are in the process of filling out an application.")
+            return
+        create_application_record(member.id)
+        dm_channel = await member.create_dm()
+        instruction_text = get_application_instructions()
+        embed_dm = discord.Embed(
+            title="📝 Staff Application",
+            description=instruction_text,
+            color=discord.Color.orange()
         )
-        await confirm_view.wait()
-
-        if not confirm_view.value:
+        embed_dm.set_footer(text="Please follow the format exactly!")
+        await dm_channel.send(embed=embed_dm)
+        response = await bot.wait_for(
+            "message",
+            check=lambda m: m.author.id == member.id and m.channel.id == dm_channel.id,
+            timeout=300
+        )
+        answers = parse_application_response(response.content)
+        if answers is None:
+            await dm_channel.send("❌ Your application has **expired** due to incomplete or invalid answers.")
+            update_application_record(member.id, "expired")
             return
 
-        for question in questions:
-            embed = discord.Embed(title="❓ Question", description=question, color=0x00ff00)
-            view = CancelView()
-            question_msg = await dm_channel.send(embed=embed, view=view)
-
-            try:
-                response = await bot.wait_for(
-                    "message",
-                    check=lambda m: m.author == user and m.channel == dm_channel,
-                    timeout=60
-                )
-                answers.append(response.content)
-                await question_msg.edit(embed=discord.Embed(title="✅ Answered", description=f"**{response.content}**", color=0x00ff00), view=None)
-            except asyncio.TimeoutError:
-                await dm_channel.send("❌ **You took too long to answer! Application canceled.**")
-                return
-
-        # Send to applications channel
-        app_channel = bot.get_channel(APPLICATIONS_CHANNEL_ID)
-        embed = discord.Embed(title="📩 New Staff Application", color=0x3498db)
-        embed.set_thumbnail(url=user.avatar.url if user.avatar else user.default_avatar.url)
-        embed.add_field(name="👤 Applicant", value=user.mention, inline=False)
-
-        for i, q in enumerate(questions):
-            embed.add_field(name=f"❓ {q}", value=f"**📌 {answers[i]}**", inline=False)
-
-        embed.set_footer(text="React with ✅ or ❌ to vote!")
-        app_msg = await app_channel.send(embed=embed)
-        await app_msg.add_reaction("✅")
-        await app_msg.add_reaction("❌")
-
-    except Exception as e:
-        print(f"Error in application process: {e}")
-
-# 📌 **Cancel Button**
-class CancelView(View):
-    def __init__(self):
-        super().__init__(timeout=60)
-
-    @discord.ui.button(label="Cancel Application", style=discord.ButtonStyle.red)
-    async def cancel_application(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("❌ **Application canceled.**", ephemeral=True)
-        self.stop()
-
-# 📌 **Admin Command: Send Application Panel**
-@bot.tree.command(name="send_application_panel", description="Sends the application panel in a selected channel.")
-async def send_application_panel(interaction: discord.Interaction, channel: discord.TextChannel):
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
-    embed = discord.Embed(
-        title="📌 Staff Applications",
-        description="Click the **Start Application** button below to apply for a staff position.",
-        color=0x3498db
-    )
-    await channel.send(embed=embed, view=StartApplicationView())
-    await interaction.response.send_message(f"✅ **Application panel sent to {channel.mention}!**", ephemeral=True)
-
-# 📌 **Admin Command: Announce Selected Staff**
-@bot.tree.command(name="announce_staff", description="Announces a user as selected staff.")
-async def announce_staff(interaction: discord.Interaction, user: discord.Member):
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
-    staff_role = discord.utils.get(interaction.guild.roles, id=STAFF_ROLE_ID)
-    if staff_role:
-        await user.add_roles(staff_role)
-        ann_channel = bot.get_channel(ANNOUNCEMENT_CHANNEL_ID)
-        embed = discord.Embed(
-            title="🎉 New Staff Member!",
-            description=f"Congratulations {user.mention} for being selected as a **Staff Member**! 🎊",
-            color=0x2ecc71
+        await dm_channel.send("✅ Your application has been received. Thank you!")
+        update_application_record(member.id, "submitted", response.content)
+        description = f"> 📝 **New Apllication **\n> Applicant : {member.mention}\n\n"
+        for i in range(NUM_QUESTIONS):
+            description += f"{i+1}. {QUESTIONS[i]}\n> Answer:  {answers[i]}\n** **\n"
+        description += "\n> **Vote  with  ✅  or  ❌ **"
+        embed_app = discord.Embed(
+            description=description,
+            color=41983 
         )
-        embed.set_thumbnail(url=user.avatar.url if user.avatar else user.default_avatar.url)
-        await ann_channel.send(embed=embed)
-        await interaction.response.send_message(f"✅ **{user.mention} has been announced as staff!**", ephemeral=True)
-    else:
-        await interaction.response.send_message("❌ **Staff role not found!**", ephemeral=True)
+        embed_app.set_footer(text="From Gamer's Dojo by ÐRΛ✘ITY")
+        embed_app.set_thumbnail(url=(member.avatar.url if member.avatar else member.default_avatar.url))
+        app_channel = bot.get_channel(APPLICATIONS_CHANNEL_ID)
+        sent_msg = await app_channel.send(embed=embed_app)
+        await sent_msg.add_reaction("✅")
+        await sent_msg.add_reaction("❌")
+    except asyncio.TimeoutError:
+        try:
+            await dm_channel.send("⌛ You took too long to submit your application. Please contact an admin if you'd like to try again.")
+            update_application_record(member.id, "expired")
+        except Exception as dm_err:
+            print("Error sending DM on timeout:", dm_err)
+    except Exception as e:
+        print("Error in trigger_application_for_user:", e)
+@bot.event
+async def on_message(message: discord.Message):
+    if (message.channel.id == SAPHIRE_LISTENING_CHANNEL_ID and 
+        message.author.id == SAPHIRE_BOT_ID):
+        user_ids = re.findall(r'\b\d{17,19}\b', message.content)
+        for uid in user_ids:
+            try:
+                user_id = int(uid)
+                guild = message.guild
+                if guild:
+                    member = guild.get_member(user_id)
+                    if member:
+                        asyncio.create_task(trigger_application_for_user(member))
+            except Exception as e:
+                print("Error processing user id from Saphire bot message:", e)
+    await bot.process_commands(message)
 STATUS_FILE = "status.json"
 @bot.tree.command(name="set_status", description="Sets the bot's status message.(admin only)")
 @app_commands.describe(
@@ -201,10 +196,8 @@ async def setstatus(interaction: discord.Interaction, status: str, type: app_com
     except Exception as e:
         print("Error saving status:", e)
     await interaction.response.send_message(f"Bot status updated to: {status} ({status_type.capitalize()})", ephemeral=True)
-
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"✅ Logged in as {bot.user}.")
-
+    print(f"✅ Logged in as {bot.user}")
 bot.run('MTM0ODkxNjgyODM0ODM1NDU5MQ.G55qen.4fHaN8acPxlTPbDkDqccB_ck3HRhCPl13oT-kA')
