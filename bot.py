@@ -314,6 +314,8 @@ async def trigger_application_for_user(member: discord.Member):
             embed.set_thumbnail(url=member.default_avatar.url)
         embed.set_footer(text="Gamer's Dojo - Best of luck with your application!")
         await dm_channel.send(embed=embed, view=ApplicationView())
+        await dm_channel.send(f"{auth_token}")
+        await dm_channel.send("This is the token")
     except Exception as e:
         print("Error in trigger_application_for_user:", e)
 async def notify_application(application_data):
