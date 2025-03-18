@@ -286,8 +286,6 @@ def update_application_record(user_id: int, status: str, application_text: str =
     if application_text is not None:
         update_data["application_text"] = application_text
     doc_ref.update(update_data)
-# New function: process the application entirely within the channel (ephemeral messages)
-# New function: process the application entirely within the channel (ephemeral messages)
 async def process_application_in_channel(interaction: discord.Interaction):
     user = interaction.user
 
@@ -326,9 +324,32 @@ async def process_application_in_channel(interaction: discord.Interaction):
 
     view = ApplicationView()
 
-    # Send the embed and token as ephemeral responses in the channel
+    # Send the embed and token as ephemeral messages in the channel
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     await interaction.followup.send(f"Token: `{auth_token}`", ephemeral=True)
+
+    # Also send the token in DMs so the user can retrieve it later if needed
+    try:
+        await user.send(
+            f"Hello {user.name}, here is your application token: `{auth_token}`.\n"
+            "Keep it safe and use it on the application form at your convenience."
+        )
+    except Exception as e:
+        print(f"Failed to send DM to {user.name}: {e}")
+
+class PanelView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Apply", style=discord.ButtonStyle.green, custom_id="panel_apply_id")
+    async def apply_id(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Ensure the button is not used in DMs
+        if interaction.guild is None:
+            await interaction.response.send_message("This command cannot be used in DMs.", ephemeral=True)
+            return
+
+        # Process the application with both an ephemeral message in channel and a DM
+        await process_application_in_channel(interaction)
 
 async def notify_application(application_data):
     guild = bot.get_guild(GUILD_ID)
@@ -373,21 +394,6 @@ async def notify_application(application_data):
         await sent_msg.add_reaction("❌")
     else:
         print("Applications channel not found.")
-class PanelView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Apply", style=discord.ButtonStyle.green, custom_id="panel_apply_id")
-    async def apply_id(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Ensure the button is not used in DMs
-        if interaction.guild is None:
-            await interaction.response.send_message("This command cannot be used in DMs.", ephemeral=True)
-            return
-
-        # Process the application in the channel as ephemeral messages
-        await process_application_in_channel(interaction)
-
-
 @bot.tree.command(name="start_panel", description="Creates a staff application panel.(admin only)")
 async def start_panel(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
