@@ -406,7 +406,7 @@ async def end_applications(interaction: discord.Interaction):
         embed.color = discord.Color.red()
         embed.title = "📋 Staff Application Panel - CLOSED"
         embed.description = "Applications are now CLOSED. Thank you for your interest!"
-        await panel_msg.edit(embed=embed)
+        await panel_msg.edit(embed=embed,view=None)
         clear_panel_id()
         await interaction.response.send_message("Applications have been ended.", ephemeral=True)
     except Exception as e:
