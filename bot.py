@@ -286,6 +286,7 @@ def update_application_record(user_id: int, status: str, application_text: str =
     if application_text is not None:
         update_data["application_text"] = application_text
     doc_ref.update(update_data)
+
 async def process_application_in_channel(interaction: discord.Interaction):
     user = interaction.user
 
@@ -296,44 +297,38 @@ async def process_application_in_channel(interaction: discord.Interaction):
         )
         return
 
-    # Generate a unique token and create the application record in Firebase
+    # Generate a unique token and create the application record
     auth_token = secrets.token_hex(4)
     create_application_record(user.id, auth_token)
 
-    # Build the embed with instructions
+    # Build the embed matching the provided JSON structure
     embed = discord.Embed(
-        title="📝 Staff Application Token",
         description=(
-            f"Hello {user.name},\n\n"
-            "Thank you for your interest in joining Gamer's Dojo staff!\n\n"
-            "Please follow these steps:\n"
-            "**Step 1:** Click the **View Application** button below to open the online application form.\n"
-            "**Step 2:** Enter the following unique token into the form:\n"
-            f"`{auth_token}`\n\n"
-            "This token is one-time use. Keep it confidential and contact an admin if you have any issues."
+            f"**📝 Staff Application Token**\n\n"
+            f"Hello {user.mention}, your staff application has been generated , Get the **Token**\n"
+            "It's most important . It will be in your dm also .\n\n"
+            f"> Token : `{auth_token}`\n"
+            f"> User_ID : `{user.id}`\n"
+            "> Link : https://gamersdojo.netlify.app/appication\n\n"
+            "** __Info__**\n"
+            "- **Step 1** : Get the **Token** copy or with **you** .\n"
+            "- **Step 2** : Go to the official [Application Page](https://gamersdojo.netlify.app/appication) of our server and enter the informations.\n\n"
+            "**__Note__**\n"
+            "This token is one-time use,Keep it confidential and contact an admin if you have any issues."
         ),
-        color=discord.Color.blue()
+        color=12171705
     )
-
-    # Set a thumbnail based on the user's avatar
+    embed.set_footer(text="Gamer's Dojo")
     if user.avatar:
         embed.set_thumbnail(url=user.avatar.url)
     else:
         embed.set_thumbnail(url=user.default_avatar.url)
-    embed.set_footer(text="Gamer's Dojo - Best of luck with your application!")
 
     view = ApplicationView()
-
-    # Send the embed and token as ephemeral messages in the channel
     await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
     await interaction.followup.send(f"Token: `{auth_token}`", ephemeral=True)
-
-    # Also send the token in DMs so the user can retrieve it later if needed
     try:
-        await user.send(
-            f"Hello {user.name}, here is your application token: `{auth_token}`.\n"
-            "Keep it safe and use it on the application form at your convenience."
-        )
+        await user.send(f"Token: `{auth_token}`")
     except Exception as e:
         print(f"Failed to send DM to {user.name}: {e}")
 
@@ -343,12 +338,12 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(label="Apply", style=discord.ButtonStyle.green, custom_id="panel_apply_id")
     async def apply_id(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Ensure the button is not used in DMs
+        # Ensure the command is used in a guild (not in DMs)
         if interaction.guild is None:
             await interaction.response.send_message("This command cannot be used in DMs.", ephemeral=True)
             return
 
-        # Process the application with both an ephemeral message in channel and a DM
+        # Process the application (sends embed and token in channel and via DM)
         await process_application_in_channel(interaction)
 
 async def notify_application(application_data):
@@ -394,24 +389,37 @@ async def notify_application(application_data):
         await sent_msg.add_reaction("❌")
     else:
         print("Applications channel not found.")
-@bot.tree.command(name="start_panel", description="Creates a staff application panel.(admin only)")
+@bot.tree.command(name="start_application", description="Creates a staff application panel (admin only).")
 async def start_panel(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
     embed = discord.Embed(
-        title="📋 Staff Application Panel",
-        description="Applications are now OPEN!\nClick the button below to apply for a staff position.",
-        color=discord.Color.green()
+        description=(
+            "**Staffs needed !**\n"
+            "Server staff applications are now opened\n"
+            "------------------------------------------------------------------\n"
+            "**__requirement__**\n"
+            ">  You have to be a above 15 ,Server staff rules must be followed.\n"
+            ">  You have to be active for more than 4 hours in discord .\n\n"
+            "**__Note__**\n"
+            "> Please fill the form correctly because it will be in a public channel for voting"
+        ),
+        color=12171705
     )
-    embed.set_footer(text="Gamer's Dojo - Application Panel")
+    embed.set_footer(text="Gamer's Dojo")
+    if bot.user.avatar:
+        embed.set_thumbnail(url=bot.user.avatar.url)
+    else:
+        embed.set_thumbnail(url=bot.user.default_avatar.url)
+    
     channel = bot.get_channel(PANEL_CHANNEL_ID)
     if not channel:
         return await interaction.response.send_message("Panel channel not found.", ephemeral=True)
+    
     panel_msg = await channel.send(embed=embed, view=PanelView())
     save_panel_id(panel_msg.id)
     await interaction.response.send_message("Staff application panel started.", ephemeral=True)
-
-@bot.tree.command(name="end_applications", description="Ends the current staff applications.(admin only)")
+@bot.tree.command(name="end_applications", description="Ends the current staff applications (admin only).")
 async def end_applications(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
@@ -423,12 +431,27 @@ async def end_applications(interaction: discord.Interaction):
         return await interaction.response.send_message("Panel channel not found.", ephemeral=True)
     try:
         panel_msg = await channel.fetch_message(panel_id)
-        embed = panel_msg.embeds[0]
-        embed.color = discord.Color.red()
-        embed.title = "📋 Staff Application Panel - CLOSED"
-        embed.description = "Applications are now CLOSED. Thank you for your interest!"
-        await panel_msg.edit(embed=embed,view=None)
+        ended_embed = discord.Embed(
+            description=(
+                "**Staffs Applications** ** -ended**\n"
+                "Server staff applications are now opened\n"
+                "------------------------------------------------------------------\n"
+                "**__requirement__**\n"
+                ">  You have to be a above 15 ,Server staff rules must be followed.\n"
+                ">  You have to be active for more than 4 hours in discord .\n\n"
+                "**__Note__**\n"
+                "> Please fill the form correctly because it will be in a public channel for voting"
+            ),
+            color=14205891
+        )
+        ended_embed.set_footer(text="Gamer's Dojo")
+        if bot.user.avatar:
+            ended_embed.set_thumbnail(url=bot.user.avatar.url)
+        else:
+            ended_embed.set_thumbnail(url=bot.user.default_avatar.url)
+        await panel_msg.edit(embed=ended_embed, view=None)
         clear_panel_id()
+        
         await interaction.response.send_message("Applications have been ended.", ephemeral=True)
     except Exception as e:
         print("Error ending applications:", e)
