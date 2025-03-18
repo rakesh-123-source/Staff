@@ -286,38 +286,50 @@ def update_application_record(user_id: int, status: str, application_text: str =
     if application_text is not None:
         update_data["application_text"] = application_text
     doc_ref.update(update_data)
-async def trigger_application_for_user(member: discord.Member):
-    try:
-        if user_has_application(member.id):
-            dm_channel = await member.create_dm()
-            await dm_channel.send("❌ You have already received an application token or are in the process of applying.")
-            return
-        auth_token = secrets.token_hex(4)
-        create_application_record(member.id, auth_token)
-        dm_channel = await member.create_dm()
-        embed = discord.Embed(
-            title="📝 Staff Application Token",
-            description=(
-                f"Hello {member.name},\n\n"
-                "Thank you for your interest in joining Gamer's Dojo staff!\n\n"
-                "Please follow these steps:\n"
-                "**Step 1:** Click the **View Application** button below to open the online application form.\n"
-                "**Step 2:** Enter the following unique token into the form:\n"
-                f"`{auth_token}`\n\n"
-                "This token is one-time use. Keep it confidential and contact an admin if you have any issues."
-            ),
-            color=discord.Color.blue()
+# New function: process the application entirely within the channel (ephemeral messages)
+# New function: process the application entirely within the channel (ephemeral messages)
+async def process_application_in_channel(interaction: discord.Interaction):
+    user = interaction.user
+
+    if user_has_application(user.id):
+        await interaction.response.send_message(
+            "❌ You have already received an application token or are in the process of applying.",
+            ephemeral=True
         )
-        if member.avatar:
-            embed.set_thumbnail(url=member.avatar.url)
-        else:
-            embed.set_thumbnail(url=member.default_avatar.url)
-        embed.set_footer(text="Gamer's Dojo - Best of luck with your application!")
-        await dm_channel.send(embed=embed, view=ApplicationView())
-        await dm_channel.send(f"{auth_token}")
-        await dm_channel.send("This is the token")
-    except Exception as e:
-        print("Error in trigger_application_for_user:", e)
+        return
+
+    # Generate a unique token and create the application record in Firebase
+    auth_token = secrets.token_hex(4)
+    create_application_record(user.id, auth_token)
+
+    # Build the embed with instructions
+    embed = discord.Embed(
+        title="📝 Staff Application Token",
+        description=(
+            f"Hello {user.name},\n\n"
+            "Thank you for your interest in joining Gamer's Dojo staff!\n\n"
+            "Please follow these steps:\n"
+            "**Step 1:** Click the **View Application** button below to open the online application form.\n"
+            "**Step 2:** Enter the following unique token into the form:\n"
+            f"`{auth_token}`\n\n"
+            "This token is one-time use. Keep it confidential and contact an admin if you have any issues."
+        ),
+        color=discord.Color.blue()
+    )
+
+    # Set a thumbnail based on the user's avatar
+    if user.avatar:
+        embed.set_thumbnail(url=user.avatar.url)
+    else:
+        embed.set_thumbnail(url=user.default_avatar.url)
+    embed.set_footer(text="Gamer's Dojo - Best of luck with your application!")
+
+    view = ApplicationView()
+
+    # Send the embed and token as ephemeral responses in the channel
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
+    await interaction.followup.send(f"Token: `{auth_token}`", ephemeral=True)
+
 async def notify_application(application_data):
     guild = bot.get_guild(GUILD_ID)
     discord_id = application_data.get("discord_id")
@@ -367,13 +379,14 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(label="Apply", style=discord.ButtonStyle.green, custom_id="panel_apply_id")
     async def apply_id(self, interaction: discord.Interaction, button: discord.ui.Button):
-        panel_channel = bot.get_channel(PANEL_CHANNEL_ID2)
-        if panel_channel:
-            # Removed the stray closing parenthesis from the f-string.
-            await panel_channel.send(f"{interaction.user.id}")
-            await interaction.response.send_message("Your application has been sent to your DM.", ephemeral=True)
-        else:
-            await interaction.response.send_message("Panel channel not found.", ephemeral=True)
+        # Ensure the button is not used in DMs
+        if interaction.guild is None:
+            await interaction.response.send_message("This command cannot be used in DMs.", ephemeral=True)
+            return
+
+        # Process the application in the channel as ephemeral messages
+        await process_application_in_channel(interaction)
+
 
 @bot.tree.command(name="start_panel", description="Creates a staff application panel.(admin only)")
 async def start_panel(interaction: discord.Interaction):
@@ -414,56 +427,6 @@ async def end_applications(interaction: discord.Interaction):
     except Exception as e:
         print("Error ending applications:", e)
         await interaction.response.send_message("Error ending applications.", ephemeral=True)
-@bot.tree.command(name="pending_staffs", description="Lists all pending staff applications.(admin only)")
-async def pending_staffs(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
-    docs = db.collection(APPLICATIONS_COLLECTION).where("status", "==", "submitted").stream()
-    pending = []
-    for doc in docs:
-        data = doc.to_dict()
-        pending.append(f"Discord ID: {data.get('discord_id')} | Answers: {data.get('q1')}, {data.get('q2')}, ...")
-    if not pending:
-        return await interaction.response.send_message("No pending applications found.", ephemeral=True)
-    embed = discord.Embed(
-        title="Pending Staff Applications",
-        description="\n".join(pending),
-        color=discord.Color.orange()
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-@bot.tree.command(name="select_staff", description="Selects a staff application.(admin only)")
-@app_commands.describe(user="The Discord user to select")
-async def select_staff(interaction: discord.Interaction, user: discord.Member):
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
-    doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(user.id))
-    doc = doc_ref.get()
-    if not doc.exists or doc.to_dict().get("status") != "submitted":
-        return await interaction.response.send_message("No submitted application found for this user.", ephemeral=True)
-    doc_ref.update({"status": "selected", "selected_at": datetime.utcnow().isoformat()})
-    try:
-        dm_channel = await user.create_dm()
-        await dm_channel.send("Congratulations! Your application has been selected. Please await further instructions.")
-    except Exception as e:
-        print("Error sending DM:", e)
-    await interaction.response.send_message(f"Selected {user.mention}'s application.", ephemeral=True)
-@bot.tree.command(name="active_staffs", description="Lists all active (selected) staffs.(admin only)")
-async def active_staffs(interaction: discord.Interaction):
-    if not interaction.user.guild_permissions.administrator:
-        return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
-    docs = db.collection(APPLICATIONS_COLLECTION).where("status", "==", "selected").stream()
-    active = []
-    for doc in docs:
-        data = doc.to_dict()
-        active.append(f"Discord ID: {data.get('discord_id')}")
-    if not active:
-        return await interaction.response.send_message("No active staffs found.", ephemeral=True)
-    embed = discord.Embed(
-        title="Active Staffs",
-        description="\n".join(active),
-        color=discord.Color.green()
-    )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
 @bot.tree.command(name="set_status", description="Sets the bot's status message (admin only)")
 @app_commands.describe(
     status="The status message to display",
@@ -499,22 +462,7 @@ async def set_status(interaction: discord.Interaction, status: str, type: app_co
     except Exception as e:
         print("Error saving status:", e)
     await interaction.response.send_message(f"Bot status updated to: {status} ({status_type.capitalize()})", ephemeral=True)
-@bot.event
-async def on_message(message: discord.Message):
-    if (message.channel.id == 1335334770980159579 and 
-        message.author.id == 1348916828348354591):
-        user_ids = re.findall(r'\b\d{17,19}\b', message.content)
-        for uid in user_ids:
-            try:
-                user_id = int(uid)
-                guild = message.guild
-                if guild:
-                    member = guild.get_member(user_id)
-                    if member:
-                        asyncio.create_task(trigger_application_for_user(member))
-            except Exception as e:
-                print("Error processing user id from message:", e)
-    await bot.process_commands(message)
+
 @bot.event
 async def on_ready():
     await bot.tree.sync()
