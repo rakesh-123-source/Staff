@@ -583,3 +583,4 @@ async def on_ready():
         print("No status file found or error restoring status:", e)
 
 keep_alive()
+bot.run('MTM0ODkxNjgyODM0ODM1NDU5MQ.G55qen.4fHaN8acPxlTPbDkDqccB_ck3HRhCPl13oT-kA') 
