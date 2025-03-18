@@ -359,21 +359,20 @@ async def notify_application(application_data):
         await sent_msg.add_reaction("❌")
     else:
         print("Applications channel not found.")
-# New UI View for the Panel
 class PanelView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        # This button sends the user's ID to the panel channel when clicked.
-        self.add_item(discord.ui.Button(label="Apply", style=discord.ButtonStyle.green, custom_id="panel_apply_id"))
 
-    @discord.ui.button(label="Apply ", style=discord.ButtonStyle.green, custom_id="panel_apply_id")
+    @discord.ui.button(label="Apply", style=discord.ButtonStyle.green, custom_id="panel_apply_id")
     async def apply_id(self, interaction: discord.Interaction, button: discord.ui.Button):
         panel_channel = bot.get_channel(PANEL_CHANNEL_ID)
         if panel_channel:
-            await panel_channel.send(f"{interaction.user.id})")
-            await interaction.response.send_message("Your application has been sent to the dm.", ephemeral=True)
+            # Removed the stray closing parenthesis from the f-string.
+            await panel_channel.send(f"{interaction.user.id}")
+            await interaction.response.send_message("Your application has been sent to your DM.", ephemeral=True)
         else:
             await interaction.response.send_message("Panel channel not found.", ephemeral=True)
+
 @bot.tree.command(name="start_panel", description="Creates a staff application panel.(admin only)")
 async def start_panel(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
