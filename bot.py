@@ -243,8 +243,8 @@ def clear_panel_id():
     db.collection("panels").document("current").delete()
 GUILD_ID = 1270760786817450086  
 APPLICATIONS_CHANNEL_ID = 1348759783184011324  
-PANEL_CHANNEL_ID = 1335334770980159579
-PANEL_CHANNEL_ID2 = 1330801025761808416
+PANEL_CHANNEL_ID = 1330801025761808416
+PANEL_CHANNEL_ID2 = 1335334770980159579
 NUM_QUESTIONS = 10
 QUESTIONS = [
     "What is your time zone?",
@@ -365,7 +365,7 @@ class PanelView(discord.ui.View):
 
     @discord.ui.button(label="Apply", style=discord.ButtonStyle.green, custom_id="panel_apply_id")
     async def apply_id(self, interaction: discord.Interaction, button: discord.ui.Button):
-        panel_channel = bot.get_channel(PANEL_CHANNEL_ID)
+        panel_channel = bot.get_channel(PANEL_CHANNEL_ID2)
         if panel_channel:
             # Removed the stray closing parenthesis from the f-string.
             await panel_channel.send(f"{interaction.user.id}")
@@ -383,7 +383,7 @@ async def start_panel(interaction: discord.Interaction):
         color=discord.Color.green()
     )
     embed.set_footer(text="Gamer's Dojo - Application Panel")
-    channel = bot.get_channel(PANEL_CHANNEL_ID2)
+    channel = bot.get_channel(PANEL_CHANNEL_ID)
     if not channel:
         return await interaction.response.send_message("Panel channel not found.", ephemeral=True)
     panel_msg = await channel.send(embed=embed, view=PanelView())
