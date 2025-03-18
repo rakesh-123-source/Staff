@@ -500,7 +500,7 @@ async def set_status(interaction: discord.Interaction, status: str, type: app_co
 @bot.event
 async def on_message(message: discord.Message):
     if (message.channel.id == 1335334770980159579 and 
-        message.author.id == 1270759337916104708):
+        message.author.id == 1348916828348354591):
         user_ids = re.findall(r'\b\d{17,19}\b', message.content)
         for uid in user_ids:
             try:
