@@ -10,7 +10,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import secrets
 from datetime import datetime
+
 app = Flask(__name__)
+
 SUCCESS_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -78,6 +80,7 @@ SUCCESS_HTML = """
 </body>
 </html>
 """
+
 ERROR_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -145,9 +148,11 @@ ERROR_HTML = """
 </body>
 </html>
 """
+
 @app.route('/')
 def home_route():
     return "Bot is running!"
+
 @app.route('/apply_staff', methods=['POST'])
 def apply_staff():
     auth_token = request.form.get('auth_token')
@@ -217,30 +222,37 @@ def apply_staff():
                                   title="Success!",
                                   message="Your application has been submitted successfully!",
                                   bgColor="#5cb85c",
-                                  buttonText="See Applicatin",
+                                  buttonText="See Application",
                                   buttonLink="https://discord.com/channels/1270760786817450086/1348759783184011324"), 200
+
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
 def keep_alive():
     t = Thread(target=run_flask)
+    t.daemon = True  # Daemon thread so it won't block exit
     t.start()
+
 cred = credentials.Certificate("server_staffs.json") 
 firebase_admin.initialize_app(cred, name="firebase_app1")
 db = firestore.client(app=firebase_admin.get_app("firebase_app1"))
 APPLICATIONS_COLLECTION = "applications"
+
 def save_panel_id(panel_id: str):
     db.collection("panels").document("current").set({
         "panel_id": panel_id,
         "started_at": datetime.utcnow().isoformat()
     })
+
 def get_panel_id() -> str:
     doc = db.collection("panels").document("current").get()
     if doc.exists:
         return doc.to_dict().get("panel_id")
     return None
+
 def clear_panel_id():
     db.collection("panels").document("current").delete()
+
 GUILD_ID = 1270760786817450086  
 APPLICATIONS_CHANNEL_ID = 1348759783184011324  
 PANEL_CHANNEL_ID = 1330801025761808416
@@ -258,13 +270,16 @@ QUESTIONS = [
     "Can you describe a situation where you successfully resolved a challenging issue online?",
     "What are your expectations from our staff team, and how do you see yourself contributing?"
 ]
+
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 STATUS_FILE = "status.json"
+
 class ApplicationView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(discord.ui.Button(label="View Application", url="https://gamersdojo.netlify.app/appication", style=discord.ButtonStyle.url))
+
 def user_has_application(user_id: int) -> bool:
     doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(user_id))
     doc = doc_ref.get()
@@ -273,6 +288,7 @@ def user_has_application(user_id: int) -> bool:
         if data.get("status") in ("pending", "in_progress", "submitted", "selected"):
             return True
     return False
+
 def create_application_record(user_id: int, auth_token: str):
     doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(user_id))
     doc_ref.set({
@@ -280,6 +296,7 @@ def create_application_record(user_id: int, auth_token: str):
         "auth_token": auth_token,
         "generated_at": datetime.utcnow().isoformat()
     })
+
 def update_application_record(user_id: int, status: str, application_text: str = None):
     doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(user_id))
     update_data = {"status": status}
@@ -303,19 +320,17 @@ async def process_application_in_channel(interaction: discord.Interaction):
 
     # Build the embed matching the provided JSON structure
     embed = discord.Embed(
-        description=(
-            f"**📝 Staff Application Token**\n\n"
-            f"Hello {user.mention}, your staff application has been generated , Get the **Token**\n"
-            "It's most important . It will be in your dm also .\n\n"
-            f"> Token : `{auth_token}`\n"
-            f"> User_ID : `{user.id}`\n"
-            "> Link : https://gamersdojo.netlify.app/appication\n\n"
-            "** __Info__**\n"
-            "- **Step 1** : Get the **Token** copy or with **you** .\n"
-            "- **Step 2** : Go to the official [Application Page](https://gamersdojo.netlify.app/appication) of our server and enter the informations.\n\n"
-            "**__Note__**\n"
-            "This token is one-time use,Keep it confidential and contact an admin if you have any issues."
-        ),
+        description=(f"**📝 Staff Application Token**\n\n"
+                     f"Hello {user.mention}, your staff application has been generated. Get the **Token** – it's important!\n\n"
+                     f"> Token : `{auth_token}`\n"
+                     f"> User_ID : `{user.id}`\n"
+                     "> Link : https://gamersdojo.netlify.app/appication\n\n"
+                     "** __Info__**\n"
+                     "- **Step 1**: Copy your **Token**.\n"
+                     "- **Step 2**: Go to the official [Application Page](https://gamersdojo.netlify.app/appication) and fill in your information.\n\n"
+                     "**__Note__**\n"
+                     "This token is one-time use. Keep it confidential and contact an admin if you have any issues."
+                     ),
         color=12171705
     )
     embed.set_footer(text="Gamer's Dojo")
@@ -389,20 +404,21 @@ async def notify_application(application_data):
         await sent_msg.add_reaction("❌")
     else:
         print("Applications channel not found.")
+
 @bot.tree.command(name="start_application", description="Creates a staff application panel (admin only).")
 async def start_panel(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
     embed = discord.Embed(
         description=(
-            "**Staffs needed !**\n"
-            "Server staff applications are now opened\n"
+            "**Staffs needed!**\n"
+            "Server staff applications are now open\n"
             "------------------------------------------------------------------\n"
-            "**__requirement__**\n"
-            ">  You have to be a above 15 ,Server staff rules must be followed.\n"
-            ">  You have to be active for more than 4 hours in discord .\n\n"
+            "**__Requirement__**\n"
+            "> You must be above 15 and follow the server staff rules.\n"
+            "> You must be active for more than 4 hours on Discord.\n\n"
             "**__Note__**\n"
-            "> Please fill the form correctly because it will be in a public channel for voting"
+            "> Please fill out the form correctly because it will be publicly visible for voting."
         ),
         color=12171705
     )
@@ -419,6 +435,7 @@ async def start_panel(interaction: discord.Interaction):
     panel_msg = await channel.send(embed=embed, view=PanelView())
     save_panel_id(panel_msg.id)
     await interaction.response.send_message("Staff application panel started.", ephemeral=True)
+
 @bot.tree.command(name="end_applications", description="Ends the current staff applications (admin only).")
 async def end_applications(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
@@ -433,14 +450,14 @@ async def end_applications(interaction: discord.Interaction):
         panel_msg = await channel.fetch_message(panel_id)
         ended_embed = discord.Embed(
             description=(
-                "**Staffs Applications** ** -ended**\n"
-                "Server staff applications are now opened\n"
+                "**Staff Applications - Ended**\n"
+                "Server staff applications have now been closed.\n"
                 "------------------------------------------------------------------\n"
-                "**__requirement__**\n"
-                ">  You have to be a above 15 ,Server staff rules must be followed.\n"
-                ">  You have to be active for more than 4 hours in discord .\n\n"
+                "**__Requirement__**\n"
+                "> You must be above 15 and follow the server staff rules.\n"
+                "> You must be active for more than 4 hours on Discord.\n\n"
                 "**__Note__**\n"
-                "> Please fill the form correctly because it will be in a public channel for voting"
+                "> Please fill out the form correctly because it was publicly visible for voting."
             ),
             color=14205891
         )
@@ -456,6 +473,7 @@ async def end_applications(interaction: discord.Interaction):
     except Exception as e:
         print("Error ending applications:", e)
         await interaction.response.send_message("Error ending applications.", ephemeral=True)
+
 @bot.tree.command(name="set_status", description="Sets the bot's status message (admin only)")
 @app_commands.describe(
     status="The status message to display",
@@ -485,27 +503,40 @@ async def set_status(interaction: discord.Interaction, status: str, type: app_co
     else:
         activity = discord.Game(name=status)
     await interaction.client.change_presence(activity=activity)
+    # Save to local file
     try:
         with open(STATUS_FILE, "w") as f:
             json.dump({"status": status, "type": status_type}, f)
     except Exception as e:
-        print("Error saving status:", e)
+        print("Error saving status to file:", e)
+    # Save to Firestore DB
+    try:
+        db.collection("bot_config").document("status").set({
+            "status": status,
+            "type": status_type,
+            "updated_at": datetime.utcnow().isoformat()
+        })
+    except Exception as e:
+        print("Error saving status to Firestore:", e)
     await interaction.response.send_message(f"Bot status updated to: {status} ({status_type.capitalize()})", ephemeral=True)
 
 @bot.event
 async def on_ready():
     await bot.tree.sync()
     print(f"✅ Logged in as {bot.user}")
-    # Restore Panel if exists
+    
+    # Restore Panel if it exists
     panel_id = get_panel_id()
     if panel_id:
         print(f"Restored active panel with ID: {panel_id}")
     else:
         print("No active panel found.")
-    # Restore bot status from file
+    
+    # Restore bot status from Firestore DB
     try:
-        with open(STATUS_FILE, "r") as f:
-            status_data = json.load(f)
+        doc = db.collection("bot_config").document("status").get()
+        if doc.exists:
+            status_data = doc.to_dict()
             status = status_data.get("status")
             status_type = status_data.get("type")
             if status and status_type:
@@ -522,9 +553,15 @@ async def on_ready():
                 else:
                     activity = discord.Game(name=status)
                 await bot.change_presence(activity=activity)
-                print(f"Restored bot status: {status} ({status_type})")
+                print(f"Restored bot status from DB: {status} ({status_type})")
+        else:
+            print("No bot status found in DB.")
     except Exception as e:
-        print("No status file found or error restoring status:", e)
+        print("Error restoring bot status from DB:", e)
+    
+    # Re-add persistent views (restores essential interactive components)
+    bot.add_view(PanelView())
+    print("Persistent PanelView has been re-added.")
 
 keep_alive()
-bot.run('MTM0ODkxNjgyODM0ODM1NDU5MQ.G55qen.4fHaN8acPxlTPbDkDqccB_ck3HRhCPl13oT-kA') 
+bot.run('MTM0ODkxNjgyODM0ODM1NDU5MQ.G55qen.4fHaN8acPxlTPbDkDqccB_ck3HRhCPl13oT-kA')
