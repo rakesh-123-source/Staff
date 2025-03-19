@@ -168,30 +168,39 @@ def apply_staff():
     q9 = request.form.get('q9')
     q10 = request.form.get('q10')
     if not all([auth_token, discord_id, q1, q2, q3, q4, q5, q6, q7, q8, q9, q10]):
-        return render_template_string(ERROR_HTML,
-                                      title="Error",
-                                      message="Please fill out all fields.",
-                                      bgColor="#d9534f",
-                                      buttonText="Return Home",
-                                      buttonLink="https://gamersdojo.netlify.app/appication"), 400
+        return render_template_string(
+            ERROR_HTML,
+            title="Error",
+            message="Please fill out all fields.",
+            bgColor="#d9534f",
+            buttonText="Return Home",
+            buttonLink="https://gamersdojo.netlify.app/appication"
+        ), 400
+
     doc_ref = db.collection(APPLICATIONS_COLLECTION).document(str(discord_id))
     doc = doc_ref.get()
     if not doc.exists:
-        return render_template_string(ERROR_HTML,
-                                      title="Error",
-                                      message="No pending application record found. Please get an application token from the Discord bot first.",
-                                      bgColor="#d9534f",
-                                      buttonText="Return Home",
-                                      buttonLink="https://gamersdojo.netlify.app/appication"), 400
+        return render_template_string(
+            ERROR_HTML,
+            title="Error",
+            message="No pending application record found. Please get an application token from the Discord bot first.",
+            bgColor="#d9534f",
+            buttonText="Return Home",
+            buttonLink="https://gamersdojo.netlify.app/appication"
+        ), 400
+
     record = doc.to_dict()
     stored_token = record.get("auth_token")
     if stored_token != auth_token:
-        return render_template_string(ERROR_HTML,
-                                      title="Error",
-                                      message="The provided token does not match our records.",
-                                      bgColor="#d9534f",
-                                      buttonText="Return Home",
-                                      buttonLink="https://gamersdojo.netlify.app/appication"), 400
+        return render_template_string(
+            ERROR_HTML,
+            title="Error",
+            message="The provided token does not match our records.",
+            bgColor="#d9534f",
+            buttonText="Return Home",
+            buttonLink="https://gamersdojo.netlify.app/appication"
+        ), 400
+
     application_data = {
         "auth_token": auth_token,
         "discord_id": discord_id,
@@ -218,12 +227,14 @@ def apply_staff():
     except Exception as e:
         print("Error notifying Discord:", e)
 
-    return render_template_string(SUCCESS_HTML,
-                                  title="Success!",
-                                  message="Your application has been submitted successfully!",
-                                  bgColor="#5cb85c",
-                                  buttonText="See Application",
-                                  buttonLink="https://discord.com/channels/1270760786817450086/1348759783184011324"), 200
+    return render_template_string(
+        SUCCESS_HTML,
+        title="Success!",
+        message="Your application has been submitted successfully!",
+        bgColor="#5cb85c",
+        buttonText="See Application",
+        buttonLink="https://discord.com/channels/1270760786817450086/1348759783184011324"
+    ), 200
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -233,6 +244,7 @@ def keep_alive():
     t.daemon = True  # Daemon thread so it won't block exit
     t.start()
 
+# Initialize Firebase
 cred = credentials.Certificate("server_staffs.json") 
 firebase_admin.initialize_app(cred, name="firebase_app1")
 db = firestore.client(app=firebase_admin.get_app("firebase_app1"))
@@ -361,6 +373,45 @@ class PanelView(discord.ui.View):
         # Process the application (sends embed and token in channel and via DM)
         await process_application_in_channel(interaction)
 
+### SAFE API CALL HELPERS ###
+
+# A helper function to safely send a message with error handling for rate limits.
+async def safe_send(channel, **kwargs):
+    try:
+        return await channel.send(**kwargs)
+    except discord.HTTPException as e:
+        if e.status == 429:
+            retry_after = getattr(e, "retry_after", 1.0)
+            await asyncio.sleep(retry_after)
+            return await channel.send(**kwargs)
+        else:
+            raise
+
+# A helper function to safely edit a message.
+async def safe_edit(message, **kwargs):
+    try:
+        return await message.edit(**kwargs)
+    except discord.HTTPException as e:
+        if e.status == 429:
+            retry_after = getattr(e, "retry_after", 1.0)
+            await asyncio.sleep(retry_after)
+            return await message.edit(**kwargs)
+        else:
+            raise
+
+# A helper function to add a reaction safely with a delay.
+async def safe_add_reaction(message, emoji, delay: float = 1.0):
+    try:
+        await message.add_reaction(emoji)
+    except discord.HTTPException as e:
+        if e.status == 429:
+            retry_after = getattr(e, "retry_after", delay)
+            await asyncio.sleep(retry_after)
+            await message.add_reaction(emoji)
+        else:
+            raise
+    await asyncio.sleep(delay)
+
 async def notify_application(application_data):
     guild = bot.get_guild(GUILD_ID)
     discord_id = application_data.get("discord_id")
@@ -399,9 +450,9 @@ async def notify_application(application_data):
         embed_app.set_thumbnail(url="https://via.placeholder.com/150")
     app_channel = bot.get_channel(APPLICATIONS_CHANNEL_ID)
     if app_channel:
-        sent_msg = await app_channel.send(embed=embed_app)
-        await sent_msg.add_reaction("✅")
-        await sent_msg.add_reaction("❌")
+        sent_msg = await safe_send(app_channel, embed=embed_app)
+        await safe_add_reaction(sent_msg, "✅")
+        await safe_add_reaction(sent_msg, "❌")
     else:
         print("Applications channel not found.")
 
@@ -432,7 +483,7 @@ async def start_panel(interaction: discord.Interaction):
     if not channel:
         return await interaction.response.send_message("Panel channel not found.", ephemeral=True)
     
-    panel_msg = await channel.send(embed=embed, view=PanelView())
+    panel_msg = await safe_send(channel, embed=embed, view=PanelView())
     save_panel_id(panel_msg.id)
     await interaction.response.send_message("Staff application panel started.", ephemeral=True)
 
@@ -466,7 +517,7 @@ async def end_applications(interaction: discord.Interaction):
             ended_embed.set_thumbnail(url=bot.user.avatar.url)
         else:
             ended_embed.set_thumbnail(url=bot.user.default_avatar.url)
-        await panel_msg.edit(embed=ended_embed, view=None)
+        await safe_edit(panel_msg, embed=ended_embed, view=None)
         clear_panel_id()
         
         await interaction.response.send_message("Applications have been ended.", ephemeral=True)
