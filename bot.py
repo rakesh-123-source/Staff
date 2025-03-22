@@ -284,7 +284,7 @@ QUESTIONS = [
 ]
 
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="~", intents=intents)
 STATUS_FILE = "status.json"
 
 class ApplicationView(discord.ui.View):
