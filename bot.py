@@ -265,10 +265,10 @@ def get_panel_id() -> str:
 def clear_panel_id():
     db.collection("panels").document("current").delete()
 
-GUILD_ID = 1270760786817450086  
-APPLICATIONS_CHANNEL_ID = 1348759783184011324  
-PANEL_CHANNEL_ID = 1330801025761808416
-PANEL_CHANNEL_ID2 = 1335334770980159579
+GUILD_ID = 1242094109238362203
+APPLICATIONS_CHANNEL_ID = 1366655775371690004
+PANEL_CHANNEL_ID = 1253965912327983108
+PANEL_CHANNEL_ID2 = 1366656003516403722
 NUM_QUESTIONS = 10
 QUESTIONS = [
     "What is your time zone?",
@@ -473,7 +473,7 @@ async def start_panel(interaction: discord.Interaction):
         ),
         color=12171705
     )
-    embed.set_footer(text="Gamer's Dojo")
+    embed.set_footer(text="Champions Circle")
     if bot.user.avatar:
         embed.set_thumbnail(url=bot.user.avatar.url)
     else:
@@ -508,11 +508,11 @@ async def end_applications(interaction: discord.Interaction):
                 "> You must be above 15 and follow the server staff rules.\n"
                 "> You must be active for more than 4 hours on Discord.\n\n"
                 "**__Note__**\n"
-                "> Please fill out the form correctly because it was publicly visible for voting."
+                "> Please fill out the form correctly because it will be publicly visible for voting."
             ),
             color=14205891
         )
-        ended_embed.set_footer(text="Gamer's Dojo")
+        ended_embed.set_footer(text="Champion's Circle")
         if bot.user.avatar:
             ended_embed.set_thumbnail(url=bot.user.avatar.url)
         else:
@@ -615,4 +615,4 @@ async def on_ready():
     print("Persistent PanelView has been re-added.")
 
 keep_alive()
-bot.run('MTM0ODkxNjgyODM0ODM1NDU5MQ.G55qen.4fHaN8acPxlTPbDkDqccB_ck3HRhCPl13oT-kA')
+bot.run('MTM1Nzc0NTI1MjI1Njk3MzE1NQ.G_VQSn.LcG5U9SeDmXDa9KUjPcUdo7XxeswnsauoB0a7I')
