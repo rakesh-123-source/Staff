@@ -2,7 +2,8 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import json 
+import os
+import json
 from flask import Flask, request, render_template_string
 from threading import Thread
 import re
@@ -615,4 +616,5 @@ async def on_ready():
     print("Persistent PanelView has been re-added.")
 
 keep_alive()
-bot.run('MTM1Nzc0NTI1MjI1Njk3MzE1NQ.G_VQSn.LcG5U9SeDmXDa9KUjPcUdo7XxeswnsauoB0a7I')
+token = os.getenv("token")
+bot.run(token)
